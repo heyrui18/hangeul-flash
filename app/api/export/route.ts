@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Flashcard } from '@/lib/flashcard-types'
+import { assertValidFlashcardsForExport, ValidationError } from '@/lib/validate'
 
 function escapeCSV(value: string): string {
   const str = value ?? ''
@@ -11,23 +12,15 @@ function escapeCSV(value: string): string {
 
 export async function POST(req: NextRequest) {
   try {
-    const { flashcards } = await req.json()
+    const body = await req.json()
 
-    if (!Array.isArray(flashcards) || flashcards.length === 0) {
-      return NextResponse.json({ error: 'No flashcards to export' }, { status: 400 })
-    }
+    // Internal validation
+    const flashcards = assertValidFlashcardsForExport(body?.flashcards)
 
     const headers = [
-      'Korean',
-      'Romanisation',
-      'English',
-      'Example (Korean)',
-      'Example (Romanisation)',
-      'Example (English)',
-      'Grammar Note',
-      'Type',
-      'Difficulty',
-      'Tags',
+      'Korean', 'Romanisation', 'English',
+      'Example (Korean)', 'Example (Romanisation)', 'Example (English)',
+      'Grammar Note', 'Type', 'Difficulty', 'Tags',
     ]
 
     const rows = flashcards.map((card: Flashcard) =>
@@ -55,7 +48,11 @@ export async function POST(req: NextRequest) {
         'Content-Disposition': 'attachment; filename="hangeul-flash-export.csv"',
       },
     })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (err: any) {
+    if (err instanceof ValidationError) {
+      return NextResponse.json({ error: err.code }, { status: 400 })
+    }
+    console.error('[export] Unhandled error:', err)
+    return NextResponse.json({ error: 'Export failed' }, { status: 500 })
   }
 }

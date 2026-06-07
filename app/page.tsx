@@ -11,9 +11,9 @@ type AppState = 'idle' | 'loading' | 'done' | 'error'
 
 const ERROR_MESSAGES: Record<string, string> = {
   INVALID_URL: "That doesn't look like a valid YouTube URL. Try: https://www.youtube.com/watch?v=...",
-  NO_CAPTIONS: "This video doesn't have captions. Try a video with auto-generated or manual Korean subtitles.",
+  NO_CAPTIONS: 'No captions found. Try a video with Korean auto-generated or manual subtitles.',
   PRIVATE_VIDEO: 'This video is private or age-restricted. Please try a public video.',
-  NO_KOREAN: 'No Korean language was detected in this video. Try a Korean-language vlog, drama clip, or cooking show.',
+  NO_KOREAN: 'No Korean language detected. Try a Korean-language vlog, drama, or cooking video.',
   RATE_LIMIT: 'The AI is busy right now. Please wait a moment and try again.',
 }
 
@@ -79,7 +79,7 @@ export default function Home() {
 
       // Step 3: Done
       setLoadStep(3)
-      await new Promise((r) => setTimeout(r, 600)) // Brief pause to show step 3
+      await new Promise((r) => setTimeout(r, 600))
 
       setFlashcards(generateData.flashcards)
       setAppState('done')
@@ -95,7 +95,6 @@ export default function Home() {
     setErrorMsg('')
   }
 
-  // Study view
   if (appState === 'done' && flashcards.length > 0) {
     return (
       <main className="min-h-screen bg-pattern py-10 px-4">
@@ -108,10 +107,8 @@ export default function Home() {
     )
   }
 
-  // Landing / loading / error view
   return (
-    <main className="min-h-screen bg-pattern flex flex-col items-center justify-center px-4 py-16 gap-12">
-      {/* Hero */}
+    <main className="min-h-screen bg-pattern flex flex-col items-center justify-center px-4 py-16 gap-10">
       <div className="text-center flex flex-col items-center gap-4 animate-fade-in">
         <div className="w-16 h-16 rounded-2xl bg-ink-blue flex items-center justify-center shadow-md mb-2">
           <span className="font-korean text-2xl text-white">한</span>
@@ -124,14 +121,11 @@ export default function Home() {
         </p>
       </div>
 
-      {/* Input / loading / error */}
       <div className="w-full max-w-xl animate-fade-in">
         {appState === 'idle' && (
           <URLInput onSubmit={handleSubmit} isLoading={false} />
         )}
-        {appState === 'loading' && (
-          <LoadingState step={loadStep} />
-        )}
+        {appState === 'loading' && <LoadingState step={loadStep} />}
         {appState === 'error' && (
           <div className="flex flex-col items-center gap-4">
             <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl px-6 py-4 text-sm font-ui text-center max-w-md">
@@ -147,7 +141,6 @@ export default function Home() {
         )}
       </div>
 
-      {/* Use cases */}
       {appState === 'idle' && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-2xl animate-fade-in">
           {USE_CASES.map((uc) => (
@@ -165,7 +158,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Footer */}
       <p className="text-xs text-gray-300 font-ui">
         Powered by Google Gemini · Built with Next.js
       </p>
