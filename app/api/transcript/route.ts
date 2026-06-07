@@ -14,97 +14,109 @@ function extractVideoId(url: string): string | null {
   return null
 }
 
-const BROWSER_HEADERS = {
+const HEADERS = {
   'User-Agent':
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
   'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-  Accept:
-    'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-  'Accept-Encoding': 'gzip, deflate, br',
-  'Cache-Control': 'no-cache',
-  Pragma: 'no-cache',
-  'Sec-Fetch-Dest': 'document',
-  'Sec-Fetch-Mode': 'navigate',
-  'Sec-Fetch-Site': 'none',
-  'Upgrade-Insecure-Requests': '1',
+  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
 }
 
-async function fetchTranscriptDirect(videoId: string): Promise<string> {
-  // Step 1: Fetch the YouTube watch page
-  const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
-    headers: BROWSER_HEADERS,
-  })
+// Approach 1: YouTube timedtext API (most reliable, no auth needed)
+async function tryTimedTextAPI(videoId: string): Promise<string | null> {
+  const langs = ['ko', 'en', '']
+  for (const lang of langs) {
+    try {
+      const url = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=${lang}&fmt=json3&xorb=2&xobt=3&xovt=3`
+      const res = await fetch(url, { headers: HEADERS })
+      if (!res.ok) continue
 
-  if (!pageRes.ok) {
-    throw new Error(`YouTube page fetch failed: ${pageRes.status}`)
-  }
+      const data = await res.json()
+      const events = data?.events ?? []
+      const text = events
+        .filter((e: any) => e.segs)
+        .map((e: any) => e.segs.map((s: any) => s.utf8 ?? '').join(''))
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim()
 
-  const html = await pageRes.text()
-
-  // Check for private/unavailable
-  if (html.includes('"status":"ERROR"') || html.includes('"status":"LOGIN_REQUIRED"')) {
-    throw new Error('PRIVATE_VIDEO')
-  }
-
-  // Step 2: Extract the caption tracks URL from the page
-  // YouTube embeds caption info in the page as JSON
-  const splittableMatch = html.match(/"captions":\s*(\{[^;]+\})/)
-  if (!splittableMatch) {
-    // Try alternative approach: look for timedtext URL directly
-    const timedTextMatch = html.match(/https:\/\/www\.youtube\.com\/api\/timedtext[^"\\]+/)
-    if (!timedTextMatch) {
-      throw new Error('NO_CAPTIONS')
+      if (text.length > 30) return text
+    } catch {
+      continue
     }
-    const timedUrl = timedTextMatch[0].replace(/\\u0026/g, '&').replace(/\\/g, '')
-    return await fetchTimedText(timedUrl)
   }
-
-  // Parse caption data
-  const captionsJson = splittableMatch[1]
-
-  // Extract all caption track URLs
-  const trackMatches = [...captionsJson.matchAll(/"baseUrl":"([^"]+)"/g)]
-  if (trackMatches.length === 0) throw new Error('NO_CAPTIONS')
-
-  // Prefer Korean tracks, fall back to first available
-  const urls = trackMatches.map((m) => m[1].replace(/\\u0026/g, '&').replace(/\\/g, ''))
-
-  // Try to find Korean track
-  const langMatches = [...captionsJson.matchAll(/"languageCode":"([^"]+)"/g)]
-  const langs = langMatches.map((m) => m[1])
-
-  let targetUrl = urls[0]
-  const koIdx = langs.findIndex((l) => l === 'ko')
-  if (koIdx !== -1 && urls[koIdx]) {
-    targetUrl = urls[koIdx]
-  }
-
-  return await fetchTimedText(targetUrl)
+  return null
 }
 
-async function fetchTimedText(url: string): Promise<string> {
-  const res = await fetch(url, { headers: BROWSER_HEADERS })
-  if (!res.ok) throw new Error('NO_CAPTIONS')
+// Approach 2: Innertube API (bypasses most regional blocks)
+async function tryInnertubeAPI(videoId: string): Promise<string | null> {
+  try {
+    // First get the page to extract caption track info
+    const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}&hl=ko`, {
+      headers: HEADERS,
+    })
+    if (!pageRes.ok) return null
+    const html = await pageRes.text()
 
-  const xml = await res.text()
+    // Extract all timedtext URLs from the page source
+    const urlMatches = [
+      ...html.matchAll(/https:\\\/\\\/www\.youtube\.com\\\/api\\\/timedtext[^"]+/g),
+    ]
 
-  // Parse XML transcript
-  const textMatches = [...xml.matchAll(/<text[^>]*>([^<]*)<\/text>/g)]
-  if (textMatches.length === 0) throw new Error('NO_CAPTIONS')
+    if (urlMatches.length === 0) {
+      // Try unescaped version
+      const raw = [...html.matchAll(/\/api\/timedtext\?[^"\\]+/g)]
+      if (raw.length === 0) return null
 
-  const transcript = textMatches
-    .map((m) =>
-      m[1]
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-        .replace(/\n/g, ' ')
-    )
-    .join(' ')
+      for (const match of raw) {
+        const url = 'https://www.youtube.com' + match[0].replace(/\\u0026/g, '&')
+        const transcript = await fetchXMLTranscript(url)
+        if (transcript) return transcript
+      }
+      return null
+    }
 
-  return transcript
+    // Prefer Korean, try all
+    const sortedUrls = urlMatches
+      .map((m) =>
+        m[0]
+          .replace(/\\\//g, '/')
+          .replace(/\\u0026/g, '&')
+          .replace(/\\/g, '')
+      )
+      .sort((a) => (a.includes('lang=ko') ? -1 : 1))
+
+    for (const url of sortedUrls) {
+      const transcript = await fetchXMLTranscript(url)
+      if (transcript) return transcript
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
+async function fetchXMLTranscript(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, { headers: HEADERS })
+    if (!res.ok) return null
+    const xml = await res.text()
+    const matches = [...xml.matchAll(/<text[^>]*>([^<]*)<\/text>/g)]
+    if (matches.length === 0) return null
+    return matches
+      .map((m) =>
+        m[1]
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
+          .replace(/\n/g, ' ')
+      )
+      .join(' ')
+      .trim()
+  } catch {
+    return null
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -120,15 +132,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'INVALID_URL' }, { status: 400 })
     }
 
-    let transcript: string
-    try {
-      transcript = await fetchTranscriptDirect(videoId)
-    } catch (err: any) {
-      const msg = err?.message ?? ''
-      if (msg === 'PRIVATE_VIDEO') {
-        return NextResponse.json({ error: 'PRIVATE_VIDEO' }, { status: 403 })
-      }
-      return NextResponse.json({ error: 'NO_CAPTIONS' }, { status: 404 })
+    // Try approaches in order
+    let transcript: string | null = null
+
+    transcript = await tryTimedTextAPI(videoId)
+    if (!transcript) {
+      transcript = await tryInnertubeAPI(videoId)
     }
 
     if (!transcript || transcript.trim().length < 20) {
