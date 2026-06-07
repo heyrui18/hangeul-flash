@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Card flip animation */
+.flip-card {
+  perspective: 1200px;
+}
+
+.flip-card-inner {
+  transition: transform 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-style: preserve-3d;
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.flip-card-inner.flipped {
+  transform: rotateY(180deg);
+}
+
+.flip-card-front,
+.flip-card-back {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  width: 100%;
+}
+
+.flip-card-back {
+  transform: rotateY(180deg);
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  overflow-y: auto;
+}
+
+/* Subtle Korean-pattern background */
+.bg-pattern {
+  background-color: #FAF8F5;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(27,43,94,0.04) 1px, transparent 0);
+  background-size: 32px 32px;
+}
+
+/* Smooth scrollbar for card back */
+.flip-card-back::-webkit-scrollbar {
+  width: 4px;
+}
+.flip-card-back::-webkit-scrollbar-track {
+  background: transparent;
+}
+.flip-card-back::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 2px;
+}
+
+/* Tag pill */
+.tag-pill {
+  @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-ui bg-gray-100 text-gray-600;
+}

@@ -1,0 +1,23 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# production build
+/.next/
+/out/
+
+# env files — NEVER commit these
+.env
+.env.local
+.env.*.local
+
+# debug
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Vercel / Render
+.vercel
