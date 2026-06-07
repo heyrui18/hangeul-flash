@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { assertValidUrl, assertValidTranscript, ValidationError } from '@/lib/validate'
+import { YoutubeTranscript } from 'youtube-transcript'
+import { assertValidUrl, ValidationError } from '@/lib/validate'
 
 const HEADERS = {
   'User-Agent':
@@ -8,10 +9,29 @@ const HEADERS = {
   Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
 }
 
+// Approach 1: youtube-transcript npm package
+async function tryYoutubeTranscriptPackage(videoId: string): Promise<string | null> {
+  // Try Korean first, then auto-detect
+  for (const lang of ['ko', undefined]) {
+    try {
+      const items = lang
+        ? await YoutubeTranscript.fetchTranscript(videoId, { lang })
+        : await YoutubeTranscript.fetchTranscript(videoId)
+      if (items && items.length > 0) {
+        return items.map((i: any) => i.text).join(' ').replace(/\s+/g, ' ').trim()
+      }
+    } catch {
+      continue
+    }
+  }
+  return null
+}
+
+// Approach 2: Direct timedtext JSON API
 async function tryTimedTextAPI(videoId: string): Promise<string | null> {
   for (const lang of ['ko', 'en', '']) {
     try {
-      const url = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=${lang}&fmt=json3&xorb=2&xobt=3&xovt=3`
+      const url = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=${lang}&fmt=json3`
       const res = await fetch(url, { headers: HEADERS })
       if (!res.ok) continue
       const data = await res.json()
@@ -30,6 +50,7 @@ async function tryTimedTextAPI(videoId: string): Promise<string | null> {
   return null
 }
 
+// Approach 3: Scrape page for timedtext URLs
 async function tryPageScrape(videoId: string): Promise<string | null> {
   try {
     const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}&hl=ko`, {
@@ -39,20 +60,20 @@ async function tryPageScrape(videoId: string): Promise<string | null> {
     const html = await pageRes.text()
 
     const raw = [...html.matchAll(/\/api\/timedtext\?[^"\\]+/g)]
-    for (const match of raw) {
-      const url = 'https://www.youtube.com' + match[0].replace(/\\u0026/g, '&')
-      const transcript = await fetchXMLTranscript(url)
-      if (transcript) return transcript
-    }
-
-    const escaped = [...html.matchAll(/https:\\\/\\\/www\.youtube\.com\\\/api\\\/timedtext[^"]+/g)]
-    const sorted = escaped
-      .map((m) => m[0].replace(/\\\//g, '/').replace(/\\u0026/g, '&').replace(/\\/g, ''))
+    const sorted = raw
+      .map((m) => 'https://www.youtube.com' + m[0].replace(/\\u0026/g, '&'))
       .sort((a) => (a.includes('lang=ko') ? -1 : 1))
 
     for (const url of sorted) {
-      const transcript = await fetchXMLTranscript(url)
-      if (transcript) return transcript
+      const t = await fetchXMLTranscript(url)
+      if (t) return t
+    }
+
+    const escaped = [...html.matchAll(/https:\\\/\\\/www\.youtube\.com\\\/api\\\/timedtext[^"]+/g)]
+    for (const m of escaped) {
+      const url = m[0].replace(/\\\//g, '/').replace(/\\u0026/g, '&').replace(/\\/g, '')
+      const t = await fetchXMLTranscript(url)
+      if (t) return t
     }
   } catch {
     return null
@@ -87,30 +108,29 @@ async function fetchXMLTranscript(url: string): Promise<string | null> {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-
-    // Internal validation — throws ValidationError with a code if invalid
     const videoId = assertValidUrl(body?.url)
 
-    let transcript: string | null = await tryTimedTextAPI(videoId)
+    // Try all three approaches in sequence
+    let transcript: string | null = null
+
+    transcript = await tryYoutubeTranscriptPackage(videoId)
+    if (!transcript) transcript = await tryTimedTextAPI(videoId)
     if (!transcript) transcript = await tryPageScrape(videoId)
 
-    // Validate transcript content
-    const validated = assertValidTranscript(transcript)
+    if (!transcript || transcript.trim().length < 20) {
+      return NextResponse.json({ error: 'NO_CAPTIONS' }, { status: 404 })
+    }
 
-    return NextResponse.json({ transcript: validated, videoId })
+    return NextResponse.json({ transcript: transcript.trim(), videoId })
   } catch (err: any) {
-    // Map validation errors to clean codes
     if (err instanceof ValidationError) {
+      const code = err.code === 'INVALID_TRANSCRIPT' ? 'NO_CAPTIONS' : err.code
       const statusMap: Record<string, number> = {
         INVALID_URL: 400,
         NO_CAPTIONS: 404,
-        INVALID_TRANSCRIPT: 404,
         PRIVATE_VIDEO: 403,
       }
-      return NextResponse.json(
-        { error: err.code },
-        { status: statusMap[err.code] ?? 400 }
-      )
+      return NextResponse.json({ error: code }, { status: statusMap[code] ?? 400 })
     }
     console.error('[transcript] Unhandled error:', err)
     return NextResponse.json({ error: 'NO_CAPTIONS' }, { status: 404 })
