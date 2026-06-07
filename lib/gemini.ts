@@ -47,7 +47,7 @@ export async function generateFlashcards(
   videoTitle: string
 ): Promise<Flashcard[]> {
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
+    model: 'gemini-2.0-flash-lite',
     generationConfig: {
       temperature: 0.4,
       maxOutputTokens: 8192,
