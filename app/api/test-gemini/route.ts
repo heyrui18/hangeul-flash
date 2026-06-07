@@ -1,15 +1,13 @@
 /**
  * Diagnostic endpoint — visit /api/test-gemini to test AI connection.
- * Remove this file once confirmed working.
  */
 import { NextResponse } from 'next/server'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { GoogleGenAI } from '@google/genai'
 
 const MODELS_TO_TRY = [
-  'gemini-2.0-flash-lite',
   'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
   'gemini-1.5-flash',
-  'gemini-1.5-flash-latest',
 ]
 
 export async function GET() {
@@ -18,18 +16,20 @@ export async function GET() {
     return NextResponse.json({ error: 'GEMINI_API_KEY not set' }, { status: 500 })
   }
 
-  const genAI = new GoogleGenerativeAI(key)
+  const ai = new GoogleGenAI({ apiKey: key })
   const results: Record<string, string> = {}
 
   for (const modelName of MODELS_TO_TRY) {
     try {
-      const model = genAI.getGenerativeModel({ model: modelName })
-      const result = await model.generateContent('Say the word: ready')
-      results[modelName] = '✅ ' + result.response.text().slice(0, 50)
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: 'Say the word: ready',
+      })
+      results[modelName] = '✅ ' + (response.text ?? '').slice(0, 50)
     } catch (e: any) {
-      results[modelName] = '❌ ' + (e?.message ?? 'failed').slice(0, 100)
+      results[modelName] = '❌ ' + (e?.message ?? 'failed').slice(0, 120)
     }
   }
 
-  return NextResponse.json({ key_prefix: key.slice(0, 8) + '...', results })
+  return NextResponse.json({ key_prefix: key.slice(0, 10) + '...', results })
 }

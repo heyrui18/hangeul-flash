@@ -1,7 +1,6 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { GoogleGenAI } from '@google/genai'
 import { Flashcard } from './flashcard-types'
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
+import { assertValidFlashcards } from './validate'
 
 const SYSTEM_PROMPT = `You are a Korean language teacher specialising in advanced learners who have reached native-level fluency.
 You will receive a YouTube video transcript. Your job is to:
@@ -17,11 +16,11 @@ You will receive a YouTube video transcript. Your job is to:
 Difficulty calibration:
 - beginner: high-frequency single words, basic greetings, common verbs
 - intermediate: sentence patterns, standard politeness markers, particles with nuance
-- advanced: idiomatic expressions, formal speech, complex grammar, register-specific vocabulary, nuanced particles
+- advanced: idiomatic expressions, formal speech, complex grammar, register-specific vocabulary
 
 Return between 15 and 30 flashcards. Prioritise depth, nuance, and practical utility for an advanced learner.
 
-Each flashcard MUST follow this exact JSON structure (no extra fields):
+Each flashcard MUST follow this exact JSON structure:
 {
   "id": "unique_string_id",
   "type": "vocabulary",
@@ -33,7 +32,7 @@ Each flashcard MUST follow this exact JSON structure (no extra fields):
     "romanisation": "Romanised example sentence",
     "english": "English translation of example"
   },
-  "grammarNote": "Optional detailed grammar/usage note (omit field if not applicable)",
+  "grammarNote": "Optional detailed grammar/usage note",
   "difficultyLevel": "advanced",
   "sourceTimestamp": "2:34",
   "tags": ["tag1", "tag2"]
@@ -46,15 +45,9 @@ export async function generateFlashcards(
   transcript: string,
   videoTitle: string
 ): Promise<Flashcard[]> {
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash-lite',
-    generationConfig: {
-      temperature: 0.4,
-      maxOutputTokens: 8192,
-    },
-  })
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! })
 
-  const userMessage = `${SYSTEM_PROMPT}
+  const prompt = `${SYSTEM_PROMPT}
 
 Transcript from YouTube video titled "${videoTitle}":
 
@@ -62,10 +55,14 @@ ${transcript.slice(0, 12000)}
 
 Generate Korean flashcards from this content. Return only the JSON array.`
 
-  const result = await model.generateContent(userMessage)
-  const raw = result.response.text()
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.0-flash',
+    contents: prompt,
+    config: { temperature: 0.4, maxOutputTokens: 8192 },
+  })
 
-  // Strip any accidental markdown fences
+  const raw = response.text ?? ''
+
   const cleaned = raw
     .replace(/^```(?:json)?\s*/i, '')
     .replace(/\s*```\s*$/, '')
@@ -75,39 +72,10 @@ Generate Korean flashcards from this content. Return only the JSON array.`
   try {
     parsed = JSON.parse(cleaned)
   } catch {
-    // Try to extract JSON array from response
     const match = cleaned.match(/\[[\s\S]*\]/)
     if (!match) throw new Error('Could not parse Gemini response as JSON')
     parsed = JSON.parse(match[0])
   }
 
-  if (!Array.isArray(parsed)) throw new Error('Response is not a JSON array')
-
-  // Validate and sanitise each card
-  const flashcards: Flashcard[] = (parsed as any[])
-    .filter((card) => card.korean && card.english && card.type)
-    .map((card, i) => ({
-      id: card.id || `card_${i}`,
-      type: ['vocabulary', 'phrase', 'grammar'].includes(card.type)
-        ? card.type
-        : 'vocabulary',
-      korean: card.korean,
-      romanisation: card.romanisation || '',
-      english: card.english,
-      exampleSentence: {
-        korean: card.exampleSentence?.korean || '',
-        romanisation: card.exampleSentence?.romanisation || '',
-        english: card.exampleSentence?.english || '',
-      },
-      grammarNote: card.grammarNote || undefined,
-      difficultyLevel: ['beginner', 'intermediate', 'advanced'].includes(
-        card.difficultyLevel
-      )
-        ? card.difficultyLevel
-        : 'intermediate',
-      sourceTimestamp: card.sourceTimestamp || undefined,
-      tags: Array.isArray(card.tags) ? card.tags : [],
-    }))
-
-  return flashcards
+  return assertValidFlashcards(parsed)
 }
