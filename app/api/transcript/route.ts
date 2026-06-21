@@ -2,14 +2,42 @@ import { NextRequest, NextResponse } from 'next/server'
 import { YoutubeTranscript } from 'youtube-transcript'
 import { assertValidUrl, ValidationError } from '@/lib/validate'
 
-const HEADERS = {
+const BROWSER_HEADERS = {
   'User-Agent':
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
   'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
   Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
 }
 
-// Approach 1: youtube-transcript npm package
+// ── Approach 1 (primary on production): Supadata YouTube Transcript API ───────
+// Supadata proxies YouTube through non-datacenter IPs, bypassing IP blocks.
+// Free tier: 100 req/day — get key at supadata.ai
+async function trySupadata(videoId: string): Promise<string | null> {
+  const key = process.env.SUPADATA_API_KEY
+  if (!key) return null
+
+  try {
+    const res = await fetch(
+      `https://api.supadata.ai/v1/youtube/transcript?videoId=${videoId}&text=true`,
+      { headers: { 'x-api-key': key } }
+    )
+    if (!res.ok) {
+      console.error(`[transcript] Supadata returned ${res.status}`)
+      return null
+    }
+    const data = await res.json()
+    const text = typeof data?.content === 'string' ? data.content.trim() : ''
+    if (text.length > 30) {
+      console.log('[transcript] Got transcript via Supadata')
+      return text
+    }
+  } catch (e) {
+    console.error('[transcript] Supadata error:', e)
+  }
+  return null
+}
+
+// ── Approach 2: youtube-transcript npm package (works on non-blocked IPs) ─────
 async function tryYoutubeTranscriptPackage(videoId: string): Promise<string | null> {
   for (const lang of ['ko', undefined]) {
     try {
@@ -17,6 +45,7 @@ async function tryYoutubeTranscriptPackage(videoId: string): Promise<string | nu
         ? await YoutubeTranscript.fetchTranscript(videoId, { lang })
         : await YoutubeTranscript.fetchTranscript(videoId)
       if (items && items.length > 0) {
+        console.log('[transcript] Got transcript via npm package')
         return items.map((i: any) => i.text).join(' ').replace(/\s+/g, ' ').trim()
       }
     } catch {
@@ -26,12 +55,12 @@ async function tryYoutubeTranscriptPackage(videoId: string): Promise<string | nu
   return null
 }
 
-// Approach 2: Direct timedtext JSON API (older videos / some auto-captions)
+// ── Approach 3: Direct timedtext JSON API ─────────────────────────────────────
 async function tryTimedTextAPI(videoId: string): Promise<string | null> {
   for (const lang of ['ko', 'en', '']) {
     try {
       const url = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=${lang}&fmt=json3`
-      const res = await fetch(url, { headers: HEADERS })
+      const res = await fetch(url, { headers: BROWSER_HEADERS })
       if (!res.ok) continue
       const data = await res.json()
       const events = data?.events ?? []
@@ -41,7 +70,10 @@ async function tryTimedTextAPI(videoId: string): Promise<string | null> {
         .join(' ')
         .replace(/\s+/g, ' ')
         .trim()
-      if (text.length > 30) return text
+      if (text.length > 30) {
+        console.log('[transcript] Got transcript via timedtext API')
+        return text
+      }
     } catch {
       continue
     }
@@ -49,62 +81,41 @@ async function tryTimedTextAPI(videoId: string): Promise<string | null> {
   return null
 }
 
-// Extract the ytInitialPlayerResponse JSON blob from the YouTube page HTML.
-// YouTube embeds this as: var ytInitialPlayerResponse = {...};
+// ── Approach 4: Parse ytInitialPlayerResponse from the YouTube watch page ─────
 function extractPlayerResponse(html: string): any | null {
   const marker = 'var ytInitialPlayerResponse = '
   const start = html.indexOf(marker)
   if (start === -1) return null
-
-  let depth = 0
-  let i = start + marker.length
+  let depth = 0, i = start + marker.length
   const jsonStart = i
-
   for (; i < html.length; i++) {
     if (html[i] === '{') depth++
-    else if (html[i] === '}') {
-      depth--
-      if (depth === 0) break
-    }
+    else if (html[i] === '}') { depth--; if (depth === 0) break }
   }
-
-  try {
-    return JSON.parse(html.slice(jsonStart, i + 1))
-  } catch {
-    return null
-  }
+  try { return JSON.parse(html.slice(jsonStart, i + 1)) } catch { return null }
 }
 
-// Approach 3: Parse ytInitialPlayerResponse from the YouTube page
 async function tryPlayerResponse(videoId: string): Promise<{ transcript: string; title: string } | null> {
   try {
     const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
-      headers: HEADERS,
+      headers: BROWSER_HEADERS,
     })
     if (!pageRes.ok) {
-      console.error(`[transcript] Page fetch failed: ${pageRes.status}`)
+      console.error(`[transcript] YouTube page returned ${pageRes.status}`)
       return null
     }
     const html = await pageRes.text()
-
     const playerResponse = extractPlayerResponse(html)
     if (!playerResponse) {
-      console.error('[transcript] Could not extract ytInitialPlayerResponse')
+      console.error('[transcript] ytInitialPlayerResponse not found in page')
       return null
     }
-
     const title: string = playerResponse?.videoDetails?.title ?? ''
     const tracks: any[] =
       playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? []
+    if (tracks.length === 0) return null
 
-    if (tracks.length === 0) {
-      console.error('[transcript] No caption tracks found in playerResponse')
-      return null
-    }
-
-    // Sort Korean tracks first
     const sorted = [...tracks].sort((a) => (a.languageCode === 'ko' ? -1 : 1))
-
     for (const track of sorted) {
       const baseUrl: string | undefined = track.baseUrl
       if (!baseUrl) continue
@@ -115,14 +126,14 @@ async function tryPlayerResponse(videoId: string): Promise<{ transcript: string;
       }
     }
   } catch (e) {
-    console.error('[transcript] tryPlayerResponse threw:', e)
+    console.error('[transcript] tryPlayerResponse error:', e)
   }
   return null
 }
 
 async function fetchXMLTranscript(url: string): Promise<string | null> {
   try {
-    const res = await fetch(url, { headers: HEADERS })
+    const res = await fetch(url, { headers: BROWSER_HEADERS })
     if (!res.ok) return null
     const xml = await res.text()
     const matches = [...xml.matchAll(/<text[^>]*>([^<]*)<\/text>/g)]
@@ -130,19 +141,15 @@ async function fetchXMLTranscript(url: string): Promise<string | null> {
     return matches
       .map((m) =>
         m[1]
-          .replace(/&amp;/g, '&')
-          .replace(/&lt;/g, '<')
-          .replace(/&gt;/g, '>')
-          .replace(/&quot;/g, '"')
-          .replace(/&#39;/g, "'")
-          .replace(/\n/g, ' ')
+          .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\n/g, ' ')
       )
       .join(' ')
       .trim()
-  } catch {
-    return null
-  }
+  } catch { return null }
 }
+
+// ── Main route ────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   try {
@@ -152,23 +159,12 @@ export async function POST(req: NextRequest) {
     let transcript: string | null = null
     let videoTitle = 'Korean Video'
 
-    // Approach 1
-    transcript = await tryYoutubeTranscriptPackage(videoId)
-    if (transcript) console.log('[transcript] Got transcript via npm package')
-
-    // Approach 2
-    if (!transcript) {
-      transcript = await tryTimedTextAPI(videoId)
-      if (transcript) console.log('[transcript] Got transcript via timedtext API')
-    }
-
-    // Approach 3 — parses ytInitialPlayerResponse, also gets the video title
+    transcript = await trySupadata(videoId)
+    if (!transcript) transcript = await tryYoutubeTranscriptPackage(videoId)
+    if (!transcript) transcript = await tryTimedTextAPI(videoId)
     if (!transcript) {
       const result = await tryPlayerResponse(videoId)
-      if (result) {
-        transcript = result.transcript
-        if (result.title) videoTitle = result.title
-      }
+      if (result) { transcript = result.transcript; if (result.title) videoTitle = result.title }
     }
 
     if (!transcript || transcript.trim().length < 20) {
@@ -180,11 +176,7 @@ export async function POST(req: NextRequest) {
   } catch (err: any) {
     if (err instanceof ValidationError) {
       const code = err.code === 'INVALID_TRANSCRIPT' ? 'NO_CAPTIONS' : err.code
-      const statusMap: Record<string, number> = {
-        INVALID_URL: 400,
-        NO_CAPTIONS: 404,
-        PRIVATE_VIDEO: 403,
-      }
+      const statusMap: Record<string, number> = { INVALID_URL: 400, NO_CAPTIONS: 404, PRIVATE_VIDEO: 403 }
       return NextResponse.json({ error: code }, { status: statusMap[code] ?? 400 })
     }
     console.error('[transcript] Unhandled error:', err)
