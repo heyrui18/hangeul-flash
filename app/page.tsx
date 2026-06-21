@@ -159,7 +159,7 @@ export default function Home() {
       )}
 
       <p className="text-xs text-gray-300 font-ui">
-        Powered by Google Gemini · Built with Next.js
+        Powered by Groq · Built with Next.js
       </p>
     </main>
   )

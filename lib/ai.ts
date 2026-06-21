@@ -1,4 +1,4 @@
-import { GoogleGenAI } from '@google/genai'
+import Groq from 'groq-sdk'
 import { Flashcard } from './flashcard-types'
 import { assertValidFlashcards } from './validate'
 
@@ -45,23 +45,25 @@ export async function generateFlashcards(
   transcript: string,
   videoTitle: string
 ): Promise<Flashcard[]> {
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! })
+  const groq = new Groq({ apiKey: process.env.GROQ_API_KEY! })
 
-  const prompt = `${SYSTEM_PROMPT}
-
-Transcript from YouTube video titled "${videoTitle}":
+  const userPrompt = `Transcript from YouTube video titled "${videoTitle}":
 
 ${transcript.slice(0, 12000)}
 
 Generate Korean flashcards from this content. Return only the JSON array.`
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.0-flash',
-    contents: prompt,
-    config: { temperature: 0.4, maxOutputTokens: 8192 },
+  const response = await groq.chat.completions.create({
+    model: 'llama-3.3-70b-versatile',
+    temperature: 0.4,
+    max_tokens: 8192,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: userPrompt },
+    ],
   })
 
-  const raw = response.text ?? ''
+  const raw = response.choices[0]?.message?.content ?? ''
 
   const cleaned = raw
     .replace(/^```(?:json)?\s*/i, '')
@@ -73,7 +75,7 @@ Generate Korean flashcards from this content. Return only the JSON array.`
     parsed = JSON.parse(cleaned)
   } catch {
     const match = cleaned.match(/\[[\s\S]*\]/)
-    if (!match) throw new Error('Could not parse Gemini response as JSON')
+    if (!match) throw new Error('Could not parse AI response as JSON')
     parsed = JSON.parse(match[0])
   }
 

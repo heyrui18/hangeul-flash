@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { generateFlashcards } from '@/lib/gemini'
+import { generateFlashcards } from '@/lib/ai'
 import { assertValidTranscript, assertValidFlashcards, ValidationError } from '@/lib/validate'
 
 export async function POST(req: NextRequest) {
@@ -10,8 +10,8 @@ export async function POST(req: NextRequest) {
     const transcript = assertValidTranscript(body?.transcript)
     const videoTitle = typeof body?.videoTitle === 'string' ? body.videoTitle : 'Korean Video'
 
-    if (!process.env.GEMINI_API_KEY) {
-      console.error('[generate] GEMINI_API_KEY is not set')
+    if (!process.env.GROQ_API_KEY) {
+      console.error('[generate] GROQ_API_KEY is not set')
       return NextResponse.json({ error: 'RATE_LIMIT' }, { status: 503 })
     }
 

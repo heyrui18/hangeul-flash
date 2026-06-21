@@ -11,7 +11,7 @@ export async function GET() {
   }
 
   // Check 1: API key present and plausible format
-  const key = process.env.GEMINI_API_KEY ?? ''
+  const key = process.env.GROQ_API_KEY ?? ''
   checks.api_key = key.length > 10
 
   // Check 2: YouTube reachable

@@ -2,34 +2,24 @@
  * Diagnostic endpoint — visit /api/test-gemini to test AI connection.
  */
 import { NextResponse } from 'next/server'
-import { GoogleGenAI } from '@google/genai'
-
-const MODELS_TO_TRY = [
-  'gemini-2.0-flash',
-  'gemini-2.0-flash-lite',
-  'gemini-1.5-flash',
-]
+import Groq from 'groq-sdk'
 
 export async function GET() {
-  const key = process.env.GEMINI_API_KEY
+  const key = process.env.GROQ_API_KEY
   if (!key) {
-    return NextResponse.json({ error: 'GEMINI_API_KEY not set' }, { status: 500 })
+    return NextResponse.json({ error: 'GROQ_API_KEY not set' }, { status: 500 })
   }
 
-  const ai = new GoogleGenAI({ apiKey: key })
-  const results: Record<string, string> = {}
-
-  for (const modelName of MODELS_TO_TRY) {
-    try {
-      const response = await ai.models.generateContent({
-        model: modelName,
-        contents: 'Say the word: ready',
-      })
-      results[modelName] = '✅ ' + (response.text ?? '').slice(0, 50)
-    } catch (e: any) {
-      results[modelName] = '❌ ' + (e?.message ?? 'failed').slice(0, 120)
-    }
+  try {
+    const groq = new Groq({ apiKey: key })
+    const response = await groq.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      max_tokens: 10,
+      messages: [{ role: 'user', content: 'Say the word: ready' }],
+    })
+    const text = response.choices[0]?.message?.content ?? ''
+    return NextResponse.json({ key_prefix: key.slice(0, 10) + '...', result: '✅ ' + text })
+  } catch (e: any) {
+    return NextResponse.json({ error: '❌ ' + (e?.message ?? 'failed').slice(0, 200) }, { status: 500 })
   }
-
-  return NextResponse.json({ key_prefix: key.slice(0, 10) + '...', results })
 }

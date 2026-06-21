@@ -2,14 +2,14 @@
 
 Turn any Korean YouTube video into AI-generated flashcards — instantly, for free.
 
-Paste a YouTube URL → the app fetches the video's Korean captions → Google Gemini analyses the transcript → you get 15–30 polished flashcards covering vocabulary, phrases, and grammar patterns, tailored for advanced learners.
+Paste a YouTube URL → the app fetches the video's Korean captions → Groq (Llama 3) analyses the transcript → you get 15–30 polished flashcards covering vocabulary, phrases, and grammar patterns, tailored for advanced learners.
 
 ---
 
 ## Prerequisites
 
 - **Node.js 18+** — [download here](https://nodejs.org)
-- **A free Gemini API key** — [get one at aistudio.google.com](https://aistudio.google.com) (no credit card needed)
+- **A free Groq API key** — [get one at console.groq.com](https://console.groq.com) (no credit card needed, takes ~1 minute)
 
 ---
 
@@ -19,11 +19,11 @@ Paste a YouTube URL → the app fetches the video's Korean captions → Google G
 # 1. Install dependencies
 npm install
 
-# 2. Copy the environment variable template
+# 2. Create your environment file
 cp .env.local.example .env.local
 
-# 3. Open .env.local and paste your Gemini API key
-#    GEMINI_API_KEY=AIza...
+# 3. Open .env.local and paste your Groq key
+#    GROQ_API_KEY=gsk_...
 
 # 4. Start the dev server
 npm run dev
@@ -40,8 +40,8 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 3. Click **New → Web Service** → select your repo
 4. Render will auto-detect the `render.yaml` config
 5. Under **Environment Variables**, add:
-   - Key: `GEMINI_API_KEY`
-   - Value: your API key from aistudio.google.com
+   - Key: `GROQ_API_KEY`
+   - Value: your key from console.groq.com (starts with `gsk_`)
 6. Click **Create Web Service** — deploy takes ~2 minutes
 
 Your app will be live at `https://hangeul-flash.onrender.com` (or similar).
@@ -77,7 +77,6 @@ Your app will be live at `https://hangeul-flash.onrender.com` (or similar).
 
 - Videos without captions (auto-generated or manual) cannot be processed
 - Auto-generated captions may contain errors — the AI does its best to work around them
-- The Gemini free tier has rate limits (15 requests/minute) — if you hit them, wait 60 seconds and try again
 - Very long videos (1h+) are trimmed to the first ~12,000 characters of transcript
 
 ---

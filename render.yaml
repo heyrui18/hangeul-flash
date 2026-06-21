@@ -8,7 +8,7 @@ services:
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
-      - key: GEMINI_API_KEY
+      - key: GROQ_API_KEY
         sync: false
       - key: NODE_ENV
         value: production
