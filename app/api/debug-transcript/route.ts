@@ -12,6 +12,28 @@ export async function GET(req: NextRequest) {
   const videoId = req.nextUrl.searchParams.get('v') ?? 'V8tEft-1C5s'
   const results: Record<string, string> = {}
 
+  // Test 0: Supadata
+  const supadataKey = process.env.SUPADATA_API_KEY
+  if (!supadataKey) {
+    results.supadata = '❌ SUPADATA_API_KEY not set in environment'
+  } else {
+    try {
+      const res = await fetch(
+        `https://api.supadata.ai/v1/youtube/transcript?videoId=${videoId}&text=true`,
+        { headers: { 'x-api-key': supadataKey } }
+      )
+      const data = await res.json().catch(() => null)
+      const text = typeof data?.content === 'string' ? data.content.trim() : ''
+      if (text.length > 10) {
+        results.supadata = `✅ ${text.length} chars`
+      } else {
+        results.supadata = `❌ status=${res.status} body=${JSON.stringify(data).slice(0, 120)}`
+      }
+    } catch (e: any) {
+      results.supadata = `❌ ${e?.message?.slice(0, 120)}`
+    }
+  }
+
   // Test 1: npm package
   try {
     const items = await YoutubeTranscript.fetchTranscript(videoId, { lang: 'ko' })
@@ -27,7 +49,7 @@ export async function GET(req: NextRequest) {
     const data = await res.json().catch(() => null)
     const events = data?.events ?? []
     const text = events.filter((e: any) => e.segs).map((e: any) => e.segs.map((s: any) => s.utf8 ?? '').join('')).join(' ').trim()
-    results.timedtext_api = text.length > 10 ? `✅ ${text.length} chars` : `❌ status=${res.status} empty events`
+    results.timedtext_api = text.length > 10 ? `✅ ${text.length} chars` : `❌ status=${res.status} empty`
   } catch (e: any) {
     results.timedtext_api = `❌ ${e?.message?.slice(0, 120)}`
   }
@@ -37,15 +59,12 @@ export async function GET(req: NextRequest) {
     const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, { headers: HEADERS })
     const html = await pageRes.text()
     results.page_status = String(pageRes.status)
-
     const marker = 'var ytInitialPlayerResponse = '
     const start = html.indexOf(marker)
     if (start === -1) {
-      results.player_response = '❌ marker not found in page'
-      // Check if consent/bot page
+      results.player_response = '❌ marker not found'
       if (html.includes('consent.youtube.com')) results.page_note = 'consent page'
       else if (html.includes('accounts.google.com')) results.page_note = 'login redirect'
-      else results.page_note = `page snippet: ${html.slice(0, 200)}`
     } else {
       let depth = 0, i = start + marker.length
       const jsonStart = i
@@ -56,7 +75,7 @@ export async function GET(req: NextRequest) {
       try {
         const pr = JSON.parse(html.slice(jsonStart, i + 1))
         const tracks = pr?.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? []
-        results.player_response = `✅ found, ${tracks.length} caption tracks`
+        results.player_response = `✅ ${tracks.length} caption tracks`
         results.caption_tracks = tracks.map((t: any) => `${t.languageCode}(${t.name?.simpleText})`).join(', ')
       } catch (e: any) {
         results.player_response = `❌ JSON parse failed: ${e?.message?.slice(0, 80)}`
