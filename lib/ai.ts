@@ -49,14 +49,14 @@ export async function generateFlashcards(
 
   const userPrompt = `Transcript from YouTube video titled "${videoTitle}":
 
-${transcript.slice(0, 12000)}
+${transcript.slice(0, 5000)}
 
 Generate Korean flashcards from this content. Return only the JSON array.`
 
   const response = await groq.chat.completions.create({
     model: 'llama-3.3-70b-versatile',
     temperature: 0.4,
-    max_tokens: 8192,
+    max_tokens: 4096,
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: userPrompt },
