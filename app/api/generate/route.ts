@@ -36,11 +36,12 @@ export async function POST(req: NextRequest) {
     }
 
     const msg = err?.message?.toLowerCase() ?? ''
+    console.error('[generate] Error:', err?.message ?? err)
+
     if (msg.includes('quota') || msg.includes('rate') || msg.includes('429')) {
       return NextResponse.json({ error: 'RATE_LIMIT' }, { status: 429 })
     }
 
-    console.error('[generate] Unhandled error:', err)
-    return NextResponse.json({ error: 'RATE_LIMIT' }, { status: 500 })
+    return NextResponse.json({ error: 'RATE_LIMIT', detail: err?.message?.slice(0, 200) }, { status: 500 })
   }
 }
