@@ -101,11 +101,12 @@ export default function FlashCard({ card, onNext, onPrev, cardIndex, total }: Fl
             </p>
           </div>
 
-          {/* BACK — English + details */}
+          {/* BACK — definition + details */}
           <div className="flip-card-back bg-white rounded-3xl shadow-lg border border-gray-100 p-8 flex flex-col gap-5 overflow-y-auto">
-            {/* Translation */}
-            <div className="text-center">
-              <p className="text-3xl font-ui font-semibold text-near-black">
+            {/* Definition */}
+            <div>
+              <p className="text-xs font-ui font-medium text-gray-400 uppercase tracking-wide mb-2">Definition</p>
+              <p className="text-base font-ui text-near-black leading-relaxed">
                 {card.english}
               </p>
             </div>

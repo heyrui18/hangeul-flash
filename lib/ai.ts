@@ -19,7 +19,17 @@ Difficulty calibration:
 - intermediate: sentence patterns, standard politeness markers, particles with nuance
 - advanced: idiomatic expressions, formal speech, complex grammar, register-specific vocabulary
 
-Return between 15 and 30 flashcards. Prioritise depth, nuance, and practical utility for an advanced learner.
+Return exactly 30 flashcards. Prioritise depth, nuance, and practical utility for an advanced learner.
+
+THE "english" FIELD MUST BE A FULL DEFINITION, not just a translation word. Follow this format exactly:
+- For nouns: "[noun] — [definition]. Related verb: [verb]하다 if applicable."
+  Example: "건강 — noun; health, physical or mental well-being. Verb form: 건강하다 (to be healthy)."
+- For verbs: "[verb] — verb; [definition]. Conjugates as: [present], [past]."
+  Example: "유지하다 — verb; to maintain, to keep up, to sustain. 유지해요 (present), 유지했어요 (past)."
+- For adjectives/descriptive verbs: "[stem] — descriptive verb; [definition]. [stem]해요 / [stem]했어요."
+- For phrases/idioms: "[phrase] — [phrase type]; [definition and nuance]."
+- For grammar patterns: "[pattern] — grammar; [what it expresses and how it attaches]."
+Always state the word class explicitly (noun, verb, descriptive verb, adverb, particle, grammar pattern, etc.).
 
 Each flashcard MUST follow this exact JSON structure:
 {
@@ -27,13 +37,13 @@ Each flashcard MUST follow this exact JSON structure:
   "type": "vocabulary",
   "korean": "Korean text here",
   "romanisation": "romanised pronunciation",
-  "english": "English translation",
+  "english": "Full definition as described above",
   "exampleSentence": {
     "korean": "Full example sentence in Korean",
     "romanisation": "Romanised example sentence",
     "english": "English translation of example"
   },
-  "grammarNote": "Optional detailed grammar/usage note",
+  "grammarNote": "Nuance, etymology, register, collocations, or usage notes for a near-native learner",
   "difficultyLevel": "advanced",
   "sourceTimestamp": "2:34",
   "tags": ["tag1", "tag2"]
@@ -57,7 +67,7 @@ Generate Korean flashcards from this content. Return only the JSON array.`
   const response = await groq.chat.completions.create({
     model: 'llama-3.3-70b-versatile',
     temperature: 0.4,
-    max_tokens: 4096,
+    max_tokens: 6000,
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: userPrompt },
