@@ -11,7 +11,6 @@ const HEADERS = {
 
 // Approach 1: youtube-transcript npm package
 async function tryYoutubeTranscriptPackage(videoId: string): Promise<string | null> {
-  // Try Korean first, then auto-detect
   for (const lang of ['ko', undefined]) {
     try {
       const items = lang
@@ -27,7 +26,7 @@ async function tryYoutubeTranscriptPackage(videoId: string): Promise<string | nu
   return null
 }
 
-// Approach 2: Direct timedtext JSON API
+// Approach 2: Direct timedtext JSON API (older videos / some auto-captions)
 async function tryTimedTextAPI(videoId: string): Promise<string | null> {
   for (const lang of ['ko', 'en', '']) {
     try {
@@ -50,33 +49,73 @@ async function tryTimedTextAPI(videoId: string): Promise<string | null> {
   return null
 }
 
-// Approach 3: Scrape page for timedtext URLs
-async function tryPageScrape(videoId: string): Promise<string | null> {
+// Extract the ytInitialPlayerResponse JSON blob from the YouTube page HTML.
+// YouTube embeds this as: var ytInitialPlayerResponse = {...};
+function extractPlayerResponse(html: string): any | null {
+  const marker = 'var ytInitialPlayerResponse = '
+  const start = html.indexOf(marker)
+  if (start === -1) return null
+
+  let depth = 0
+  let i = start + marker.length
+  const jsonStart = i
+
+  for (; i < html.length; i++) {
+    if (html[i] === '{') depth++
+    else if (html[i] === '}') {
+      depth--
+      if (depth === 0) break
+    }
+  }
+
   try {
-    const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}&hl=ko`, {
-      headers: HEADERS,
-    })
-    if (!pageRes.ok) return null
-    const html = await pageRes.text()
-
-    const raw = [...html.matchAll(/\/api\/timedtext\?[^"\\]+/g)]
-    const sorted = raw
-      .map((m) => 'https://www.youtube.com' + m[0].replace(/\\u0026/g, '&'))
-      .sort((a) => (a.includes('lang=ko') ? -1 : 1))
-
-    for (const url of sorted) {
-      const t = await fetchXMLTranscript(url)
-      if (t) return t
-    }
-
-    const escaped = [...html.matchAll(/https:\\\/\\\/www\.youtube\.com\\\/api\\\/timedtext[^"]+/g)]
-    for (const m of escaped) {
-      const url = m[0].replace(/\\\//g, '/').replace(/\\u0026/g, '&').replace(/\\/g, '')
-      const t = await fetchXMLTranscript(url)
-      if (t) return t
-    }
+    return JSON.parse(html.slice(jsonStart, i + 1))
   } catch {
     return null
+  }
+}
+
+// Approach 3: Parse ytInitialPlayerResponse from the YouTube page
+async function tryPlayerResponse(videoId: string): Promise<{ transcript: string; title: string } | null> {
+  try {
+    const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+      headers: HEADERS,
+    })
+    if (!pageRes.ok) {
+      console.error(`[transcript] Page fetch failed: ${pageRes.status}`)
+      return null
+    }
+    const html = await pageRes.text()
+
+    const playerResponse = extractPlayerResponse(html)
+    if (!playerResponse) {
+      console.error('[transcript] Could not extract ytInitialPlayerResponse')
+      return null
+    }
+
+    const title: string = playerResponse?.videoDetails?.title ?? ''
+    const tracks: any[] =
+      playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? []
+
+    if (tracks.length === 0) {
+      console.error('[transcript] No caption tracks found in playerResponse')
+      return null
+    }
+
+    // Sort Korean tracks first
+    const sorted = [...tracks].sort((a) => (a.languageCode === 'ko' ? -1 : 1))
+
+    for (const track of sorted) {
+      const baseUrl: string | undefined = track.baseUrl
+      if (!baseUrl) continue
+      const transcript = await fetchXMLTranscript(baseUrl)
+      if (transcript) {
+        console.log(`[transcript] Got transcript via playerResponse (lang: ${track.languageCode})`)
+        return { transcript, title }
+      }
+    }
+  } catch (e) {
+    console.error('[transcript] tryPlayerResponse threw:', e)
   }
   return null
 }
@@ -110,18 +149,34 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const videoId = assertValidUrl(body?.url)
 
-    // Try all three approaches in sequence
     let transcript: string | null = null
+    let videoTitle = 'Korean Video'
 
+    // Approach 1
     transcript = await tryYoutubeTranscriptPackage(videoId)
-    if (!transcript) transcript = await tryTimedTextAPI(videoId)
-    if (!transcript) transcript = await tryPageScrape(videoId)
+    if (transcript) console.log('[transcript] Got transcript via npm package')
+
+    // Approach 2
+    if (!transcript) {
+      transcript = await tryTimedTextAPI(videoId)
+      if (transcript) console.log('[transcript] Got transcript via timedtext API')
+    }
+
+    // Approach 3 — parses ytInitialPlayerResponse, also gets the video title
+    if (!transcript) {
+      const result = await tryPlayerResponse(videoId)
+      if (result) {
+        transcript = result.transcript
+        if (result.title) videoTitle = result.title
+      }
+    }
 
     if (!transcript || transcript.trim().length < 20) {
+      console.error(`[transcript] All approaches failed for videoId: ${videoId}`)
       return NextResponse.json({ error: 'NO_CAPTIONS' }, { status: 404 })
     }
 
-    return NextResponse.json({ transcript: transcript.trim(), videoId })
+    return NextResponse.json({ transcript: transcript.trim(), videoId, videoTitle })
   } catch (err: any) {
     if (err instanceof ValidationError) {
       const code = err.code === 'INVALID_TRANSCRIPT' ? 'NO_CAPTIONS' : err.code
