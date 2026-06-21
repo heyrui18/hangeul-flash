@@ -1,6 +1,7 @@
 import Groq from 'groq-sdk'
 import { Flashcard } from './flashcard-types'
 import { assertValidFlashcards } from './validate'
+import { applyRomanisation } from './romanise'
 
 const SYSTEM_PROMPT = `You are a Korean language teacher specialising in advanced learners who have reached native-level fluency.
 You will receive a YouTube video transcript. Your job is to:
@@ -79,5 +80,5 @@ Generate Korean flashcards from this content. Return only the JSON array.`
     parsed = JSON.parse(match[0])
   }
 
-  return assertValidFlashcards(parsed)
+  return applyRomanisation(assertValidFlashcards(parsed))
 }

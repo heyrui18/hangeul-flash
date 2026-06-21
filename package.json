@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "groq-sdk": "^1.2.1",
+    "hangul-romanize": "^0.3.2",
     "lucide-react": "^0.400.0",
     "next": "^15.3.0",
     "react": "^18",
