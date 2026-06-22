@@ -168,11 +168,13 @@ async function fetchXMLTranscript(url: string): Promise<string | null> {
 // ── Main route ────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  // Rate limiting: 10 transcript fetches per hour per IP
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown'
-  if (!checkRateLimit(`transcript:${ip}`, 10, 60 * 60 * 1000)) {
+  // Rate limiting: 30 transcript fetches per 10 minutes per IP
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim()
+    ?? req.headers.get('x-real-ip')
+    ?? 'unknown'
+  if (!checkRateLimit(`transcript:${ip}`, 30, 10 * 60 * 1000)) {
     return NextResponse.json(
-      { error: 'RATE_LIMIT', detail: 'Too many requests. Please wait before trying again.' },
+      { error: 'RATE_LIMIT', detail: 'Too many requests. Please wait a few minutes before trying again.' },
       { status: 429 }
     )
   }

@@ -4,11 +4,13 @@ import { assertValidTranscript, assertValidFlashcards, ValidationError } from '@
 import { checkRateLimit } from '@/lib/rate-limit'
 
 export async function POST(req: NextRequest) {
-  // Rate limiting: 5 generations per hour per IP
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown'
-  if (!checkRateLimit(`generate:${ip}`, 5, 60 * 60 * 1000)) {
+  // Rate limiting: 20 generations per 10 minutes per IP
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim()
+    ?? req.headers.get('x-real-ip')
+    ?? 'unknown'
+  if (!checkRateLimit(`generate:${ip}`, 20, 10 * 60 * 1000)) {
     return NextResponse.json(
-      { error: 'RATE_LIMIT', detail: 'Too many requests. Please wait before generating again.' },
+      { error: 'RATE_LIMIT', detail: 'Too many requests. Please wait a few minutes before generating again.' },
       { status: 429 }
     )
   }
