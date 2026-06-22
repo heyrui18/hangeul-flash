@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { YoutubeTranscript } from 'youtube-transcript'
 import { assertValidUrl, ValidationError } from '@/lib/validate'
+import { checkRateLimit } from '@/lib/rate-limit'
+
+const FETCH_TIMEOUT = 20_000
 
 const BROWSER_HEADERS = {
   'User-Agent':
@@ -10,8 +13,6 @@ const BROWSER_HEADERS = {
 }
 
 // ── Approach 1 (primary on production): Supadata YouTube Transcript API ───────
-// Supadata proxies YouTube through non-datacenter IPs, bypassing IP blocks.
-// Free tier: 100 req/day — get key at supadata.ai
 async function trySupadata(videoId: string): Promise<string | null> {
   const key = process.env.SUPADATA_API_KEY
   if (!key) return null
@@ -19,7 +20,7 @@ async function trySupadata(videoId: string): Promise<string | null> {
   try {
     const res = await fetch(
       `https://api.supadata.ai/v1/youtube/transcript?videoId=${videoId}&text=true`,
-      { headers: { 'x-api-key': key } }
+      { headers: { 'x-api-key': key }, signal: AbortSignal.timeout(FETCH_TIMEOUT) }
     )
     if (!res.ok) {
       console.error(`[transcript] Supadata returned ${res.status}`)
@@ -41,9 +42,17 @@ async function trySupadata(videoId: string): Promise<string | null> {
 async function tryYoutubeTranscriptPackage(videoId: string): Promise<string | null> {
   for (const lang of ['ko', undefined]) {
     try {
-      const items = lang
-        ? await YoutubeTranscript.fetchTranscript(videoId, { lang })
-        : await YoutubeTranscript.fetchTranscript(videoId)
+      const fetchPromise = lang
+        ? YoutubeTranscript.fetchTranscript(videoId, { lang })
+        : YoutubeTranscript.fetchTranscript(videoId)
+
+      const items = await Promise.race([
+        fetchPromise,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('timeout')), FETCH_TIMEOUT)
+        ),
+      ])
+
       if (items && items.length > 0) {
         console.log('[transcript] Got transcript via npm package')
         return items.map((i: any) => i.text).join(' ').replace(/\s+/g, ' ').trim()
@@ -60,7 +69,10 @@ async function tryTimedTextAPI(videoId: string): Promise<string | null> {
   for (const lang of ['ko', 'en', '']) {
     try {
       const url = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=${lang}&fmt=json3`
-      const res = await fetch(url, { headers: BROWSER_HEADERS })
+      const res = await fetch(url, {
+        headers: BROWSER_HEADERS,
+        signal: AbortSignal.timeout(FETCH_TIMEOUT),
+      })
       if (!res.ok) continue
       const data = await res.json()
       const events = data?.events ?? []
@@ -99,6 +111,7 @@ async function tryPlayerResponse(videoId: string): Promise<{ transcript: string;
   try {
     const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
       headers: BROWSER_HEADERS,
+      signal: AbortSignal.timeout(FETCH_TIMEOUT),
     })
     if (!pageRes.ok) {
       console.error(`[transcript] YouTube page returned ${pageRes.status}`)
@@ -133,7 +146,10 @@ async function tryPlayerResponse(videoId: string): Promise<{ transcript: string;
 
 async function fetchXMLTranscript(url: string): Promise<string | null> {
   try {
-    const res = await fetch(url, { headers: BROWSER_HEADERS })
+    const res = await fetch(url, {
+      headers: BROWSER_HEADERS,
+      signal: AbortSignal.timeout(FETCH_TIMEOUT),
+    })
     if (!res.ok) return null
     const xml = await res.text()
     const matches = [...xml.matchAll(/<text[^>]*>([^<]*)<\/text>/g)]
@@ -152,6 +168,15 @@ async function fetchXMLTranscript(url: string): Promise<string | null> {
 // ── Main route ────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  // Rate limiting: 10 transcript fetches per hour per IP
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown'
+  if (!checkRateLimit(`transcript:${ip}`, 10, 60 * 60 * 1000)) {
+    return NextResponse.json(
+      { error: 'RATE_LIMIT', detail: 'Too many requests. Please wait before trying again.' },
+      { status: 429 }
+    )
+  }
+
   try {
     const body = await req.json()
     const videoId = assertValidUrl(body?.url)
@@ -172,7 +197,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'NO_CAPTIONS' }, { status: 404 })
     }
 
-    return NextResponse.json({ transcript: transcript.trim(), videoId, videoTitle })
+    const truncated = transcript.trim().length > 12000
+
+    return NextResponse.json({
+      transcript: transcript.trim(),
+      videoId,
+      videoTitle,
+      truncated,
+    })
   } catch (err: any) {
     if (err instanceof ValidationError) {
       const code = err.code === 'INVALID_TRANSCRIPT' ? 'NO_CAPTIONS' : err.code

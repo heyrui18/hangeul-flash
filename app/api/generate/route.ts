@@ -1,12 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { generateFlashcards } from '@/lib/ai'
 import { assertValidTranscript, assertValidFlashcards, ValidationError } from '@/lib/validate'
+import { checkRateLimit } from '@/lib/rate-limit'
 
 export async function POST(req: NextRequest) {
+  // Rate limiting: 5 generations per hour per IP
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown'
+  if (!checkRateLimit(`generate:${ip}`, 5, 60 * 60 * 1000)) {
+    return NextResponse.json(
+      { error: 'RATE_LIMIT', detail: 'Too many requests. Please wait before generating again.' },
+      { status: 429 }
+    )
+  }
+
   try {
     const body = await req.json()
 
-    // Internal validation
     const transcript = assertValidTranscript(body?.transcript)
     const videoTitle = typeof body?.videoTitle === 'string' ? body.videoTitle : 'Korean Video'
 
@@ -16,8 +25,6 @@ export async function POST(req: NextRequest) {
     }
 
     const raw = await generateFlashcards(transcript, videoTitle)
-
-    // Validate and sanitise every card from the AI response
     const flashcards = assertValidFlashcards(raw)
 
     return NextResponse.json({ flashcards })

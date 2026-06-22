@@ -50,6 +50,8 @@ export function assertValidTranscript(transcript: unknown): string {
 
 const VALID_TYPES = new Set(['vocabulary', 'phrase', 'grammar'])
 const VALID_LEVELS = new Set(['beginner', 'intermediate', 'advanced'])
+const VALID_TOPIK = new Set(['I', 'II', 'advanced', 'unknown'])
+const VALID_FORMALITY = new Set(['formal', 'informal', 'neutral', 'honorific'])
 
 export function assertValidFlashcards(data: unknown): Flashcard[] {
   if (!Array.isArray(data)) {
@@ -88,6 +90,11 @@ export function assertValidFlashcards(data: unknown): Flashcard[] {
       sourceTimestamp: typeof card.sourceTimestamp === 'string'
         ? card.sourceTimestamp
         : undefined,
+      sourceContext: typeof card.sourceContext === 'string'
+        ? card.sourceContext.trim()
+        : undefined,
+      topikLevel: VALID_TOPIK.has(card.topikLevel) ? card.topikLevel : 'unknown',
+      formality: VALID_FORMALITY.has(card.formality) ? card.formality : 'neutral',
       tags: Array.isArray(card.tags) ? card.tags.filter((t: unknown) => typeof t === 'string') : [],
     })
   }

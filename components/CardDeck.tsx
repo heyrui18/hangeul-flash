@@ -7,39 +7,60 @@ import ExportPanel from './ExportPanel'
 
 interface CardDeckProps {
   flashcards: Flashcard[]
+  videoTitle: string
+  videoUrl: string
   onReset: () => void
 }
 
-const FILTERS: { label: string; value: FilterType }[] = [
+const FILTERS: { label: string; value: FilterType; group?: string }[] = [
   { label: 'All', value: 'all' },
-  { label: '단어 Vocab', value: 'vocabulary' },
-  { label: '표현 Phrase', value: 'phrase' },
-  { label: '문법 Grammar', value: 'grammar' },
-  { label: 'Beginner', value: 'beginner' },
-  { label: 'Intermediate', value: 'intermediate' },
-  { label: 'Advanced', value: 'advanced' },
+  { label: '단어 Vocab', value: 'vocabulary', group: 'type' },
+  { label: '표현 Phrase', value: 'phrase', group: 'type' },
+  { label: '문법 Grammar', value: 'grammar', group: 'type' },
+  { label: 'Beginner', value: 'beginner', group: 'difficulty' },
+  { label: 'Intermediate', value: 'intermediate', group: 'difficulty' },
+  { label: 'Advanced', value: 'advanced', group: 'difficulty' },
+  { label: 'TOPIK I', value: 'topik-I', group: 'topik' },
+  { label: 'TOPIK II', value: 'topik-II', group: 'topik' },
+  { label: 'Formal', value: 'formal', group: 'formality' },
+  { label: 'Informal', value: 'informal', group: 'formality' },
 ]
 
-export default function CardDeck({ flashcards, onReset }: CardDeckProps) {
+function getFilterLabel(value: FilterType): string {
+  return FILTERS.find((f) => f.value === value)?.label ?? value
+}
+
+export default function CardDeck({ flashcards, videoTitle, videoUrl, onReset }: CardDeckProps) {
   const [activeFilter, setActiveFilter] = useState<FilterType>('all')
   const [currentIndex, setCurrentIndex] = useState(0)
   const [showExport, setShowExport] = useState(false)
 
   const filtered = useMemo(() => {
     if (activeFilter === 'all') return flashcards
-    return flashcards.filter(
-      (c) => c.type === activeFilter || c.difficultyLevel === activeFilter
-    )
+    if (activeFilter === 'vocabulary' || activeFilter === 'phrase' || activeFilter === 'grammar') {
+      return flashcards.filter((c) => c.type === activeFilter)
+    }
+    if (activeFilter === 'beginner' || activeFilter === 'intermediate' || activeFilter === 'advanced') {
+      return flashcards.filter((c) => c.difficultyLevel === activeFilter)
+    }
+    if (activeFilter === 'topik-I') return flashcards.filter((c) => c.topikLevel === 'I')
+    if (activeFilter === 'topik-II') return flashcards.filter((c) => c.topikLevel === 'II')
+    if (activeFilter === 'formal') return flashcards.filter((c) => c.formality === 'formal')
+    if (activeFilter === 'informal') return flashcards.filter((c) => c.formality === 'informal')
+    return flashcards
   }, [flashcards, activeFilter])
 
-  // Reset index when filter changes
   const handleFilterChange = (filter: FilterType) => {
     setActiveFilter(filter)
     setCurrentIndex(0)
+    setShowExport(false)
   }
 
   const handleNext = () => setCurrentIndex((i) => Math.min(i + 1, filtered.length - 1))
   const handlePrev = () => setCurrentIndex((i) => Math.max(i - 1, 0))
+
+  // Safety clamp: in case filter produces fewer cards than current index
+  const safeIndex = Math.min(currentIndex, Math.max(0, filtered.length - 1))
 
   if (filtered.length === 0) {
     return (
@@ -57,14 +78,14 @@ export default function CardDeck({ flashcards, onReset }: CardDeckProps) {
 
   return (
     <div className="flex flex-col gap-6 w-full max-w-lg mx-auto">
-      {/* Top bar: filter + export */}
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex flex-wrap gap-2">
+      {/* Filter bar — horizontally scrollable on mobile */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none flex-1 min-w-0">
           {FILTERS.map((f) => (
             <button
               key={f.value}
               onClick={() => handleFilterChange(f.value)}
-              className={`px-3 py-1.5 rounded-full text-xs font-ui font-medium transition-all ${
+              className={`px-3 py-1.5 rounded-full text-xs font-ui font-medium transition-all whitespace-nowrap shrink-0 ${
                 activeFilter === f.value
                   ? 'bg-ink-blue text-white'
                   : 'bg-white border border-gray-200 text-gray-600 hover:border-ink-blue hover:text-ink-blue'
@@ -77,7 +98,8 @@ export default function CardDeck({ flashcards, onReset }: CardDeckProps) {
 
         <button
           onClick={() => setShowExport((s) => !s)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-ui font-medium border border-gray-200 text-gray-600 hover:border-coral hover:text-coral transition-all bg-white"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-ui font-medium border border-gray-200 text-gray-600 hover:border-coral hover:text-coral transition-all bg-white shrink-0"
+          aria-label="Toggle export panel"
         >
           ↓ Export CSV
         </button>
@@ -85,15 +107,22 @@ export default function CardDeck({ flashcards, onReset }: CardDeckProps) {
 
       {/* Export panel */}
       {showExport && (
-        <ExportPanel flashcards={filtered} onClose={() => setShowExport(false)} />
+        <ExportPanel
+          flashcards={filtered}
+          videoTitle={videoTitle}
+          videoUrl={videoUrl}
+          activeFilter={activeFilter}
+          filterLabel={getFilterLabel(activeFilter)}
+          onClose={() => setShowExport(false)}
+        />
       )}
 
       {/* Flash card */}
       <FlashCard
-        card={filtered[currentIndex]}
+        card={filtered[safeIndex]}
         onNext={handleNext}
         onPrev={handlePrev}
-        cardIndex={currentIndex}
+        cardIndex={safeIndex}
         total={filtered.length}
       />
 
