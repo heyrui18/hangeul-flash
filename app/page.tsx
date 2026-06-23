@@ -18,6 +18,9 @@ const ERROR_MESSAGES: Record<string, string> = {
   PRIVATE_VIDEO: 'This video is private or age-restricted. Please try a public video.',
   NO_KOREAN: 'No Korean language detected. Try a Korean-language vlog, drama, or cooking video.',
   RATE_LIMIT: 'Too many requests. Please wait a moment and try again.',
+  GROQ_RATE_LIMIT: 'Groq AI is rate-limiting requests right now. Wait 30 seconds and try again.',
+  NO_API_KEY: 'Server configuration error: GROQ_API_KEY is not set. Check your Render environment variables.',
+  GENERATE_FAILED: 'AI generation failed unexpectedly. Check the Render logs for details.',
 }
 
 const USE_CASES = [

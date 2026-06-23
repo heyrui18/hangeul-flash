@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
 
     if (!process.env.GROQ_API_KEY) {
       console.error('[generate] GROQ_API_KEY is not set')
-      return NextResponse.json({ error: 'RATE_LIMIT' }, { status: 503 })
+      return NextResponse.json({ error: 'NO_API_KEY' }, { status: 503 })
     }
 
     const raw = await generateFlashcards(transcript, videoTitle)
@@ -36,9 +36,12 @@ export async function POST(req: NextRequest) {
     console.error('[generate] Error:', err?.message ?? err)
 
     if (msg.includes('quota') || msg.includes('rate') || msg.includes('429')) {
-      return NextResponse.json({ error: 'RATE_LIMIT' }, { status: 429 })
+      return NextResponse.json({ error: 'GROQ_RATE_LIMIT' }, { status: 429 })
     }
 
-    return NextResponse.json({ error: 'RATE_LIMIT', detail: err?.message?.slice(0, 200) }, { status: 500 })
+    return NextResponse.json(
+      { error: 'GENERATE_FAILED', detail: err?.message?.slice(0, 200) },
+      { status: 500 }
+    )
   }
 }
