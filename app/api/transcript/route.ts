@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { YoutubeTranscript } from 'youtube-transcript'
 import { assertValidUrl, ValidationError } from '@/lib/validate'
-import { checkRateLimit } from '@/lib/rate-limit'
 
 const FETCH_TIMEOUT = 20_000
 
@@ -168,17 +167,6 @@ async function fetchXMLTranscript(url: string): Promise<string | null> {
 // ── Main route ────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  // Rate limiting: 30 transcript fetches per 10 minutes per IP
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim()
-    ?? req.headers.get('x-real-ip')
-    ?? 'unknown'
-  if (!checkRateLimit(`transcript:${ip}`, 30, 10 * 60 * 1000)) {
-    return NextResponse.json(
-      { error: 'RATE_LIMIT', detail: 'Too many requests. Please wait a few minutes before trying again.' },
-      { status: 429 }
-    )
-  }
-
   try {
     const body = await req.json()
     const videoId = assertValidUrl(body?.url)
