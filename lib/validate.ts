@@ -72,6 +72,22 @@ export function assertValidFlashcards(data: unknown): Flashcard[] {
       continue
     }
 
+    // Skip cards with hallucinated sourceContext (word not from transcript)
+    if (typeof card.sourceContext === 'string') {
+      const lc = card.sourceContext.toLowerCase()
+      if (
+        lc.includes('does not contain') ||
+        lc.includes('not found in') ||
+        lc.includes('not present') ||
+        lc.includes('valid korean') ||
+        lc.includes('vocabulary item') ||
+        lc.includes('not in the transcript')
+      ) {
+        console.warn(`[validate] Skipping card ${i} (${card.korean}): not from transcript`)
+        continue
+      }
+    }
+
     valid.push({
       id: typeof card.id === 'string' ? card.id : `card_${i}`,
       type: VALID_TYPES.has(card.type) ? card.type : 'vocabulary',
