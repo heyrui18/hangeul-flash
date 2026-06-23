@@ -43,6 +43,12 @@ export function assertValidTranscript(transcript: unknown): string {
   if (trimmed.length < 20) {
     throw new ValidationError('NO_CAPTIONS', 'Transcript is too short to be valid')
   }
+  // Require at least 3% Korean characters (Hangul block: AC00–D7A3, Jamo: 1100–11FF)
+  const koreanChars = (trimmed.match(/[가-힣ᄀ-ᇿ]/g) ?? []).length
+  const ratio = koreanChars / trimmed.length
+  if (ratio < 0.03) {
+    throw new ValidationError('NO_KOREAN', 'Transcript contains insufficient Korean text')
+  }
   return trimmed
 }
 

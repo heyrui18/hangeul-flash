@@ -127,7 +127,14 @@ async function tryPlayerResponse(videoId: string): Promise<{ transcript: string;
       playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? []
     if (tracks.length === 0) return null
 
-    const sorted = [...tracks].sort((a) => (a.languageCode === 'ko' ? -1 : 1))
+    // Only use Korean tracks; fall back to auto-generated Korean if needed
+    const koTracks = tracks.filter((t: any) =>
+      typeof t.languageCode === 'string' && t.languageCode.startsWith('ko')
+    )
+    const sorted = koTracks.length > 0 ? koTracks : tracks.filter((t: any) =>
+      typeof t.languageCode === 'string' && t.languageCode.startsWith('ko')
+    )
+    if (sorted.length === 0) return null
     for (const track of sorted) {
       const baseUrl: string | undefined = track.baseUrl
       if (!baseUrl) continue
