@@ -3,7 +3,7 @@ import { Flashcard } from './flashcard-types'
 import { assertValidFlashcards } from './validate'
 import { applyRomanisation } from './romanise'
 
-const TRANSCRIPT_CAP = 12000
+const TRANSCRIPT_CAP = 6000
 
 const SYSTEM_PROMPT = `You are a Korean language teacher specialising in advanced learners who have reached native-level fluency.
 You will receive a YouTube video transcript. Your job is to extract vocabulary that exists as a real, standalone dictionary entry.
@@ -51,7 +51,7 @@ Formality:
 - "neutral": appropriate in both formal and informal registers
 - "honorific": 존댓말 forms, honorific vocabulary (진지, 성함, 댁)
 
-Return exactly 30 flashcards. Prioritise depth, nuance, and practical utility for an advanced learner.
+Return exactly 20 flashcards. Prioritise depth, nuance, and practical utility for an advanced learner.
 
 THE "english" FIELD MUST BE A FULL DEFINITION, not just a translation word. Follow this format exactly:
 - For nouns: "[noun] — [definition]. Related verb: [verb]하다 if applicable."
@@ -107,7 +107,7 @@ Generate Korean flashcards from this content. Return only the JSON array.`
   const response = await groq.chat.completions.create({
     model: 'llama-3.3-70b-versatile',
     temperature: 0.4,
-    max_tokens: 8000,
+    max_tokens: 5000,
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: userPrompt },
