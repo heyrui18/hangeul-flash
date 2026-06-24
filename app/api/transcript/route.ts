@@ -18,7 +18,7 @@ async function trySupadata(videoId: string): Promise<string | null> {
 
   try {
     const res = await fetch(
-      `https://api.supadata.ai/v1/youtube/transcript?videoId=${videoId}&text=true`,
+      `https://api.supadata.ai/v1/youtube/transcript?videoId=${videoId}&lang=ko&text=true`,
       { headers: { 'x-api-key': key }, signal: AbortSignal.timeout(FETCH_TIMEOUT) }
     )
     if (!res.ok) {
@@ -39,7 +39,7 @@ async function trySupadata(videoId: string): Promise<string | null> {
 
 // ── Approach 2: youtube-transcript npm package (works on non-blocked IPs) ─────
 async function tryYoutubeTranscriptPackage(videoId: string): Promise<string | null> {
-  for (const lang of ['ko', undefined]) {
+  for (const lang of ['ko']) {
     try {
       const fetchPromise = lang
         ? YoutubeTranscript.fetchTranscript(videoId, { lang })
@@ -65,7 +65,7 @@ async function tryYoutubeTranscriptPackage(videoId: string): Promise<string | nu
 
 // ── Approach 3: Direct timedtext JSON API ─────────────────────────────────────
 async function tryTimedTextAPI(videoId: string): Promise<string | null> {
-  for (const lang of ['ko', 'en', '']) {
+  for (const lang of ['ko']) {
     try {
       const url = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=${lang}&fmt=json3`
       const res = await fetch(url, {
