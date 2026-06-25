@@ -64,7 +64,9 @@ export async function POST(req: NextRequest) {
       '',
     ]
 
-    const csv = [...metaLines, headers.join(','), ...rows].join('\n')
+    // Prepend UTF-8 BOM so Excel opens Korean characters correctly
+    const BOM = '﻿'
+    const csv = BOM + [...metaLines, headers.join(','), ...rows].join('\n')
 
     const filename = videoTitle
       ? `${safeFilename(videoTitle)}-flashcards.csv`

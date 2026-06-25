@@ -194,13 +194,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'NO_CAPTIONS' }, { status: 404 })
     }
 
-    const truncated = transcript.trim().length > 6000
-
     return NextResponse.json({
       transcript: transcript.trim(),
       videoId,
       videoTitle,
-      truncated,
+      truncated: false,
     })
   } catch (err: any) {
     if (err instanceof ValidationError) {

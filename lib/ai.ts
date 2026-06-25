@@ -3,7 +3,9 @@ import { Flashcard } from './flashcard-types'
 import { assertValidFlashcards } from './validate'
 import { applyRomanisation } from './romanise'
 
-const TRANSCRIPT_CAP = 6000
+// Max chars to send per chunk; three chunks = up to 18 000 chars of coverage
+const CHUNK_SIZE = 5000
+const NUM_CHUNKS = 3
 
 const SYSTEM_PROMPT = `You are a Korean language teacher specialising in advanced learners who have reached native-level fluency.
 You will receive a YouTube video transcript. Your job is to extract vocabulary that exists as a real, standalone dictionary entry.
@@ -91,24 +93,45 @@ difficultyLevel must be one of: "beginner", "intermediate", "advanced"
 topikLevel must be one of: "I", "II", "advanced", "unknown"
 formality must be one of: "formal", "informal", "neutral", "honorific"`
 
+/**
+ * Sample up to NUM_CHUNKS evenly-spaced sections from the transcript.
+ * A small random jitter shifts the window each call so repeated requests
+ * on the same video surface different vocabulary.
+ */
+function sampleTranscript(transcript: string): { sample: string; isFull: boolean } {
+  const total = transcript.length
+  if (total <= CHUNK_SIZE * NUM_CHUNKS) {
+    return { sample: transcript, isFull: true }
+  }
+
+  const jitter = Math.floor(Math.random() * CHUNK_SIZE * 0.4) // up to 40% of chunk size
+  const chunks: string[] = []
+  for (let i = 0; i < NUM_CHUNKS; i++) {
+    const base = Math.floor((total / NUM_CHUNKS) * i)
+    const start = Math.min(base + jitter, total - CHUNK_SIZE)
+    chunks.push(transcript.slice(start, start + CHUNK_SIZE))
+  }
+
+  return { sample: chunks.join('\n\n[...]\n\n'), isFull: false }
+}
+
 export async function generateFlashcards(
   transcript: string,
   videoTitle: string
 ): Promise<Flashcard[]> {
   const groq = new Groq({ apiKey: process.env.GROQ_API_KEY! })
 
-  const truncated = transcript.length > TRANSCRIPT_CAP
-  const transcriptSlice = transcript.slice(0, TRANSCRIPT_CAP)
+  const { sample, isFull } = sampleTranscript(transcript)
 
-  const userPrompt = `Transcript from YouTube video titled "${videoTitle}"${truncated ? ' [transcript truncated to first portion]' : ''}:
+  const userPrompt = `Transcript from YouTube video titled "${videoTitle}"${isFull ? '' : ' [sampled from beginning, middle, and end of video]'}:
 
-${transcriptSlice}
+${sample}
 
-Generate Korean flashcards from this content. Return only the JSON array.`
+Generate Korean flashcards from this content. Focus on the most significant, high-utility vocabulary spread across the entire video. Return only the JSON array.`
 
   const response = await groq.chat.completions.create({
     model: 'llama-3.3-70b-versatile',
-    temperature: 0.4,
+    temperature: 0.6,
     max_tokens: 5000,
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
