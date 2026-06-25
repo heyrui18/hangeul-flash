@@ -103,7 +103,9 @@ export default function FlashCard({ card, onNext, onPrev, cardIndex, total }: Fl
       >
         <div className={`flip-card-inner ${flipped ? 'flipped' : ''}`}>
           {/* FRONT — Korean */}
-          <div className="flip-card-front bg-white rounded-3xl shadow-lg border border-gray-100 flex flex-col items-center justify-center p-8 gap-4">
+          <div className="flip-card-front bg-white rounded-3xl shadow-lg border border-gray-100 flex flex-col items-center justify-center p-8 gap-4 relative overflow-hidden">
+            {/* Accent stripe */}
+            <div className="absolute top-0 left-0 right-0 h-1 rounded-t-3xl" style={{ background: 'linear-gradient(90deg, #1B2B5E, #3B5CB8, #E8735A)' }} aria-hidden="true" />
             {/* Type badge */}
             <span className="text-xs font-ui font-medium px-3 py-1 rounded-full bg-ink-blue/10 text-ink-blue">
               {typeLabel[card.type] ?? card.type}

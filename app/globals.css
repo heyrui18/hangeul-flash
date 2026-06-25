@@ -44,12 +44,62 @@
   min-height: 100%;
 }
 
-/* Subtle Korean-pattern background */
+/* Card/deck view — subtle dot grid */
 .bg-pattern {
-  background-color: #FAF8F5;
+  background-color: #F5F3EF;
   background-image:
-    radial-gradient(circle at 1px 1px, rgba(27,43,94,0.04) 1px, transparent 0);
-  background-size: 32px 32px;
+    radial-gradient(circle at 1px 1px, rgba(27,43,94,0.06) 1px, transparent 0);
+  background-size: 28px 28px;
+}
+
+/* Landing hero — gradient wash */
+.hero-bg {
+  background: linear-gradient(145deg, #EEF0F8 0%, #FAF8F5 45%, #FDF3EE 100%);
+}
+
+/* Decorative ghost Korean characters */
+.deco-char {
+  position: absolute;
+  font-family: var(--font-korean), serif;
+  color: rgba(27, 43, 94, 0.045);
+  line-height: 1;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Sidebar card block */
+.sidebar-card {
+  background: white;
+  border-radius: 1rem;
+  padding: 1rem;
+  border: 1px solid #f3f4f6;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.sidebar-label {
+  font-family: var(--font-ui), sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.5rem;
+  display: block;
+}
+
+/* Landing use-case cards */
+.use-case-card {
+  background: rgba(255,255,255,0.7);
+  backdrop-filter: blur(8px);
+  border-radius: 1rem;
+  padding: 1.25rem;
+  border: 1px solid rgba(255,255,255,0.9);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  cursor: default;
+  transition: box-shadow 0.2s;
+}
+.use-case-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
 }
 
 /* Smooth scrollbar for card back */
